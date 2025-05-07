@@ -1,182 +1,174 @@
-const User = require('../models/User');
-const asyncHandler = require('../middleware/async');
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-// Generate JWT Token
-const generateToken = (id) => {
+// JWT token oluşturma
+const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+    expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
 
-// Send token response with cookie
-const sendTokenResponse = (user, statusCode, res) => {
-  const token = generateToken(user._id);
+// Token oluşturma ve gönderme
+const createSendToken = (user, statusCode, res) => {
+  const token = signToken(user._id);
 
-  const options = {
-    expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000),
+  // JWT cookie ayarları
+  const cookieOptions = {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
+    ),
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production'
   };
 
-  res
-    .status(statusCode)
-    .cookie('token', token, options)
-    .json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profileImage: user.profileImage
-      }
-    });
+  if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
+
+  res.cookie('jwt', token, cookieOptions);
+
+  // Kullanıcı şifresini response'dan kaldır
+  user.password = undefined;
+
+  res.status(statusCode).json({
+    status: 'success',
+    token,
+    userId: user._id,
+    data: {
+      user,
+    },
+  });
 };
 
-// @desc    Register a user
-// @route   POST /api/auth/register
-// @access  Public
-exports.register = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
+// Kayıt olma
+exports.signup = async (req, res) => {
+  try {
+    const newUser = await User.create({
+      name: req.body.name,
+      email: req.body.email,
+      password: req.body.password,
+    });
 
-  // Check if user already exists
-  const userExists = await User.findOne({ 
-    $or: [{ email }, { username }] 
-  });
-
-  if (userExists) {
-    return res.status(400).json({
-      success: false,
-      error: userExists.email === email 
-        ? 'Email already in use' 
-        : 'Username already taken'
+    createSendToken(newUser, 201, res);
+  } catch (err) {
+    res.status(400).json({
+      status: 'error',
+      message: err.message,
     });
   }
+};
 
-  // Create user
-  const user = await User.create({
-    username,
-    email,
-    password
-  });
+// Giriş yapma
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  // Generate token and send response
-  sendTokenResponse(user, 201, res);
-});
+    // 1) Email ve şifre var mı kontrol et
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Lütfen email ve şifre girin',
+      });
+    }
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-exports.login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+    // 2) Kullanıcı var mı ve şifre doğru mu kontrol et
+    const user = await User.findOne({ email }).select('+password');
 
-  // Validate email & password
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      error: 'Please provide email and password'
+    if (!user || !(await user.correctPassword(password))) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Email veya şifre yanlış',
+      });
+    }
+
+    // 3) Her şey OK ise token gönder
+    createSendToken(user, 200, res);
+  } catch (err) {
+    res.status(400).json({
+      status: 'error',
+      message: err.message,
     });
   }
+};
 
-  // Check for user
-  const user = await User.findOne({ email }).select('+password');
+// Şifre değiştirme
+exports.updatePassword = async (req, res) => {
+  try {
+    // 1) Kullanıcıyı bul
+    const user = await User.findById(req.user.id).select('+password');
 
-  if (!user) {
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid credentials'
+    // 2) Mevcut şifre doğru mu kontrol et
+    if (!(await user.correctPassword(req.body.currentPassword))) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Mevcut şifreniz yanlış',
+      });
+    }
+
+    // 3) Şifreyi güncelle
+    user.password = req.body.newPassword;
+    await user.save();
+
+    // 4) Yeni token gönder
+    createSendToken(user, 200, res);
+  } catch (err) {
+    res.status(400).json({
+      status: 'error',
+      message: err.message,
     });
   }
+};
 
-  // Check if password matches
-  const isMatch = await user.comparePassword(password);
+// Token doğrulama middleware
+exports.protect = async (req, res, next) => {
+  try {
+    // 1) Token var mı kontrol et
+    let token;
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer')
+    ) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies.jwt) {
+      token = req.cookies.jwt;
+    }
 
-  if (!isMatch) {
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid credentials'
+    if (!token) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Lütfen giriş yapın',
+      });
+    }
+
+    // 2) Token doğrulama
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // 3) Kullanıcı hala var mı kontrol et
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Bu token\'a ait kullanıcı artık mevcut değil',
+      });
+    }
+
+    // 4) Kullanıcıyı request'e ekle
+    req.user = currentUser;
+    next();
+  } catch (err) {
+    res.status(401).json({
+      status: 'error',
+      message: 'Lütfen giriş yapın',
     });
   }
+};
 
-  // Update last login
-  user.lastLogin = Date.now();
-  await user.save({ validateBeforeSave: false });
-
-  // Generate token and send response
-  sendTokenResponse(user, 200, res);
-});
-
-// @desc    Logout user / clear cookie
-// @route   GET /api/auth/logout
-// @access  Private
-exports.logout = asyncHandler(async (req, res) => {
-  res.cookie('token', 'none', {
-    expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true
-  });
-
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
-});
-
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
-exports.getMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id);
-
-  res.status(200).json({
-    success: true,
-    data: user
-  });
-});
-
-// @desc    Update user details
-// @route   PUT /api/auth/updatedetails
-// @access  Private
-exports.updateDetails = asyncHandler(async (req, res) => {
-  const fieldsToUpdate = {
-    username: req.body.username,
-    email: req.body.email,
-    bio: req.body.bio
+// Rol kontrolü middleware
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Bu işlemi yapmaya yetkiniz yok',
+      });
+    }
+    next();
   };
-
-  // Remove undefined fields
-  Object.keys(fieldsToUpdate).forEach(
-    key => fieldsToUpdate[key] === undefined && delete fieldsToUpdate[key]
-  );
-
-  const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
-    new: true,
-    runValidators: true
-  });
-
-  res.status(200).json({
-    success: true,
-    data: user
-  });
-});
-
-// @desc    Update password
-// @route   PUT /api/auth/updatepassword
-// @access  Private
-exports.updatePassword = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id).select('+password');
-
-  // Check current password
-  if (!(await user.comparePassword(req.body.currentPassword))) {
-    return res.status(401).json({
-      success: false,
-      error: 'Current password is incorrect'
-    });
-  }
-
-  user.password = req.body.newPassword;
-  await user.save();
-
-  sendTokenResponse(user, 200, res);
-});
+};
