@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/Navbar';
-import { AuthProvider } from '@/lib/AuthContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Developer Portfolio',
-  description: 'Full Stack Developer Portfolio showcasing my skills and projects',
+  title: 'Kitap Takip ve Blog Sistemi',
+  description: 'Kitaplarınızı takip edin ve blog yazıları paylaşın',
 };
 
 export default function RootLayout({
@@ -18,14 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <AuthProvider>
-          <Navbar />
-          <div className="pt-16">
-            {children}
-          </div>
-        </AuthProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }
