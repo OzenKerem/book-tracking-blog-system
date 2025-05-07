@@ -1,0 +1,25 @@
+{
+  "name": "kerem-ozen-cifci-portfolio-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kerem Özen Çifçi'nin kişisel web sitesi ve portfolyosu",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm run build",
+    "start:frontend": "cd frontend && npm start",
+    "start:backend": "cd backend && npm start",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keremazencifci/portfolio-website"
+  },
+  "author": "Kerem Özen Çifçi",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
