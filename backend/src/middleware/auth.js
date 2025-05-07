@@ -1,61 +1,59 @@
 const jwt = require('jsonwebtoken');
-const asyncHandler = require('./async');
 const User = require('../models/User');
 
-// Protect routes
-exports.protect = asyncHandler(async (req, res, next) => {
-  let token;
-
-  // Check if token exists in headers or cookies
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    // Set token from Bearer token in header
-    token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies.token) {
-    // Set token from cookie
-    token = req.cookies.token;
-  }
-
-  // Make sure token exists
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      error: 'Not authorized to access this route'
-    });
-  }
-
+exports.protect = async (req, res, next) => {
   try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let token;
 
-    // Get user from token
-    req.user = await User.findById(decoded.id);
+    // Token'ı header'dan al
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer')
+    ) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    // Token'ı cookie'den al
+    else if (req.cookies.jwt) {
+      token = req.cookies.jwt;
+    }
 
-    if (!req.user) {
+    if (!token) {
       return res.status(401).json({
-        success: false,
-        error: 'User not found'
+        status: 'error',
+        message: 'Lütfen giriş yapın',
       });
     }
 
+    // Token doğrulama
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Kullanıcıyı bul
+    const currentUser = await User.findById(decoded.id);
+
+    if (!currentUser) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Bu token\'a ait kullanıcı bulunamadı',
+      });
+    }
+
+    // Kullanıcıyı request'e ekle
+    req.user = currentUser;
     next();
   } catch (err) {
     return res.status(401).json({
-      success: false,
-      error: 'Not authorized to access this route'
+      status: 'error',
+      message: 'Geçersiz token',
     });
   }
-});
+};
 
-// Grant access to specific roles
-exports.authorize = (...roles) => {
+exports.restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
-        success: false,
-        error: `User role ${req.user.role} is not authorized to access this route`
+        status: 'error',
+        message: 'Bu işlemi yapmaya yetkiniz yok',
       });
     }
     next();
