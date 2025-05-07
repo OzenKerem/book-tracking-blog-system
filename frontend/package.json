@@ -1,0 +1,39 @@
+{
+  "name": "kerem-ozen-cifci-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.47",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.6.5",
+    "framer-motion": "^10.18.0",
+    "next": "14.0.4",
+    "postcss": "^8.4.33",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^4.12.0",
+    "react-markdown": "^10.1.0",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.18.1",
+    "@typescript-eslint/parser": "^6.18.1",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "14.0.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keremazencifci/portfolio-website"
+  },
+  "author": "Kerem Özen Çifçi",
+  "description": "Next.js ve React ile geliştirilmiş modern portfolyo ve blog sitesi"
+}
